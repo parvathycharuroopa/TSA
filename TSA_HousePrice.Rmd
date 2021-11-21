@@ -1,0 +1,190 @@
+# TASK - Data cleaning, Data pre processing, Data transformation, EDA
+## Dataset : Housing in London
+## Data Description :
+1.date - Time period the record refers to
+2.area - Area size in hectares
+3.average_price - Monthly average house prices
+4.code - Code of the area
+5.houses_sold - Monthly number of houses sold
+6.no_of_crimes - Monthly number of crimes committed
+7.botough_flag - The data is split by areas of London called boroughs (a flag exists to identify these)
+
+
+
+
+library(tidyverse)
+library(janitor)
+library(readr)
+library(dplyr)
+library(skimr)
+library(DataExplorer)
+library(lubridate)
+library(ggplot2)
+#library(geofacet)
+library(gganimate)
+library(ggthemes)
+library(stringr)
+library(fpp2)
+library(patchwork)
+library(viridis)
+library(gghighlight)
+library(PerformanceAnalytics)
+library(lubridate)
+
+### setting working directory
+setwd("/Users/parvathycharuroopa/Downloads/TimeSeriesAnalysis")
+
+### import Dataset
+hil_dt<- read_csv("housing_in_london_monthly_variables.csv")
+
+head(hil_dt)
+### viewing dataset
+view(hil_dt)
+### checking for null values
+is.null(hil_dt) 
+### from above code we found that no null values are present
+
+###  Find duplicates
+sum(duplicated(hil_dt))
+###  there are zero duplicate values
+
+###  to get the column names
+colnames(hil_dt)
+
+### count unique codes
+n_unique(hil_dt$code)
+
+
+min(hil_dt$date)
+max(hil_dt$date)
+### hil_dt has data available for 1995-01-01 and 2020-01-01 with 45 unique codes. The year 2020 has incomplete data (only for 01 day) and will be excluded.
+
+###  Find unique areas
+unique(hil_dt$area)
+
+###  Count observations in each area
+as.data.frame(table(hil_dt$area))
+
+###  Count observations for each code
+as.data.frame(table(hil_dt$code))
+
+arrange(unique(hil_dt[c("code", "area")]))
+
+hil_dt %>% 
+  filter(area=="enfield") %>% 
+  arrange(desc(code, date)) # replicate with wrong code: delete entire row
+hil_dt %>% 
+  filter(area=="hackney") %>% 
+  arrange(desc(code, date)) # replicate with wrong code: delete entire row
+hil_dt %>% 
+  filter(area=="south east") %>% 
+  arrange(code, date) # replicate with wrong code: delete entire row
+hil_dt %>% 
+  filter(area=="tower hamlets") %>% 
+  arrange(code, date)  # replicate with wrong code: delete entire row
+  
+  
+str(hil_dt)  
+
+###  Describing basic information for input data.
+introduce(hil_dt)
+
+#Plot data description
+
+###  View missing value distribution 
+plot_missing(hil_dt)
+
+## Data Cleaning and Data Transformation
+-Excluded some variables from the dataset:
+-excluded column "borough_flag": using "code" column instead.
+-excluded data on date 2020-01-01: as this day seems to have incomplete data.
+-Removed row dated 1998-04-01 for "south east" (replicate with wrong code assigned "E09000012")
+-Removed row dated 1998-04-01 for "hackney" (replicate with wrong code assigned "E12000008")
+-Removed row dated 1996-02-01 for "enfield" (replicate with wrong code assigned "E09000030")
+-Removed row dated 1996-02-01 for "tower hamlets" (replicate with wrong code assigned "E09000010")
+-Filled up houses_sold with median values in replacing to missing values.
+
+
+###  Remove replicates with wrong codes
+m_new <- hil_dt[!(hil_dt$date == "1998-04-01" & hil_dt$area =="south east" & hil_dt$code == "E09000012") & !(hil_dt$date == "1998-04-01" & hil_dt$area =="hackney" & hil_dt$code == "E12000008") & !(hil_dt$date == "1996-02-01" & hil_dt$area =="enfield" & hil_dt$code == "E09000030") & !(hil_dt$date == "1996-02-01" & hil_dt$area =="tower hamlets" & hil_dt$code == "E09000010"),]
+
+
+###  Exclude data date 2020-01-01 as the year is incomplete
+m_new <- m_new %>% filter(date != "2020-01-01") %>% select(-"borough_flag")
+
+### Filling missing values (imputation method)
+hsold_median = median(hil_dt$houses_sold, na.rm=TRUE)
+hil_dt$houses_sold[is.na(hil_dt$houses_sold)] = hsold_median
+
+###  Find unique codes (post-cleaning & transforming)
+unique(m_new$code)
+
+###  Count how many boroughs are available, code starts with "E09"
+boroughs <- m_new %>% filter(str_detect(m_new$code, "E09")) 
+n_unique(boroughs$code)
+unique(boroughs$code)
+
+###  Count how many regions are available, code starts with "E12"
+regions <- m_new %>% filter(str_detect(m_new$code, "E12")) 
+n_unique(regions$code)
+unique(regions$code)
+
+###  Check if there are inner and outer London data available, code starts with "E13"
+greater_ld <- m_new %>% filter(str_detect(m_new$code, "E13")) 
+n_unique(greater_ld$code)
+unique(greater_ld$code)
+
+
+# Exploratory Data Analysis
+
+## Plot histogram of houses price over years
+ggplot(m_new,aes(x=average_price))+ 
+  geom_histogram(colour = "darkgray", fill = "white", bins = 40)+
+ labs(xlab = "Steps", ylab = "Count", title = "Histogram of Houses Price Over Years")+
+ geom_vline(xintercept = mean(m_new$average_price, na.rm = TRUE), 
+          color = "red", show.legend = TRUE, size = 1.5)+
+ geom_vline(xintercept = median(m_new$average_price, na.rm = TRUE), 
+           color = "blue", show.legend = TRUE, size = 1.5)+
+ scale_color_manual(name = "statistics", values = c(mean = "red", median = "blue"))+
+scale_x_continuous(labels = scales::comma)
+options(repr.plot.width = 14, repr.plot.height = 7)
+
+
+## Correlation among variables
+corr <- m_new[, -c(1,2,4)]
+chart.Correlation(corr, histogram=TRUE, pch=19)
+options(repr.plot.width = 10, repr.plot.height = 6)
+
+### changing date to date format
+
+hil_dt$date <- parse_date_time(hil_dt$date,c("%Y-%d-%m")) 
+
+### structure and summary of dataset
+summary(hil_dt)
+str(hil_dt)
+
+## Plotting January's House pricing distribution in London
+hil_dt %>%
+  ggplot( aes(x=average_price)) +
+    geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +labs(title = "January's House pricing distribution in London")
+
+head(hil_dt)   
+area_price <- tapply(hil_dt$average_price,hil_dt$area, mean )
+area_price <- as.data.frame(area_price)
+area_price <- tibble::rownames_to_column(area_price, "area")
+area_price
+
+area_price <- area_price[order(area_price$area_price, decreasing = TRUE), ]
+area_price
+
+## Plotting area wise average price og housing in london
+
+barplot(height = area_price$area_price, names = area_price$area,
+       col=rgb(0.8,0.1,0.1,0.6),
+        xlab="Areas in London", 
+        ylab="Average Price value", 
+        main="Area-wise Average Price of Housing in London", 
+        )
+
+
+
